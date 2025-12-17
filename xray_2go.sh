@@ -59,18 +59,20 @@ fi
 
 # 检查 nginx 是否已安装
 check_nginx() {
-if command -v nginx &>/dev/null; then
-    if [ -f /etc/alpine-release ]; then
-        rc-service nginx status | grep -q "started" && green "running" && return 0 || yellow "not running" && return 1
+    if command -v nginx &>/dev/null; then
+        # 使用 pgrep 检查进程，适用于所有系统
+        if pgrep -x nginx > /dev/null 2>&1; then
+            green "running"
+            return 0
+        else
+            yellow "not running"
+            return 1
+        fi
     else
-        [ "$(systemctl is-active nginx)" = "active" ] && green "running" && return 0 || yellow "not running" && return 1
+        red "not installed"
+        return 2
     fi
-else
-    red "not installed"
-    return 2
-fi
 }
-
 # 根据系统类型安装、卸载依赖
 manage_packages() {
     if [ $# -lt 2 ]; then
@@ -380,36 +382,21 @@ install_nginx () {
 
 # nginx订阅配置
 add_nginx_conf() {
-    # 先强制停止所有可能存在的nginx进程
+    # 先清理旧进程
     killall -9 nginx > /dev/null 2>&1
     sleep 1
     
     # 备份原配置
     [ -f /etc/nginx/nginx.conf ] && cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak > /dev/null 2>&1
     
-    # 检查端口是否被占用
-    if lsof -iTCP:$PORT -sTCP:LISTEN >/dev/null 2>&1; then
-        yellow "端口 $PORT 被占用，正在清理..."
-        # 找出占用端口的进程并杀死
-        fuser -k $PORT/tcp > /dev/null 2>&1
-        sleep 2
-    fi
+    # 创建必要目录
+    mkdir -p /var/log/nginx /run/nginx
     
     green "使用端口: $PORT"
     
-    # 创建日志目录
-    mkdir -p /var/log/nginx /run/nginx
-    
-    # Alpine 特定的用户设置
-    if [ -f /etc/alpine-release ]; then
-        nginx_user="nginx"
-    else
-        nginx_user="nginx"
-    fi
-    
     # 写入nginx配置
     cat > /etc/nginx/nginx.conf << EOF
-user $nginx_user;
+user nginx;
 worker_processes auto;
 error_log /var/log/nginx/error.log warn;
 pid /run/nginx.pid;
@@ -449,34 +436,25 @@ http {
 EOF
 
     # 设置权限
-    chown -R $nginx_user:$nginx_user /var/log/nginx 2>/dev/null
+    chown -R nginx:nginx /var/log/nginx 2>/dev/null
     chmod 755 /var/log/nginx 2>/dev/null
     
-    # 测试nginx配置
-    nginx -t > /dev/null 2>&1
-    
-    if [ $? -eq 0 ]; then
+    # 测试配置
+    if nginx -t > /dev/null 2>&1; then
         if [ -f /etc/alpine-release ]; then
+            rc-service nginx zap > /dev/null 2>&1
             rc-service nginx start
         else
             systemctl daemon-reload
             systemctl start nginx
         fi
         
-        # 验证nginx是否真的启动了
         sleep 2
-        if [ -f /etc/alpine-release ]; then
-            if rc-service nginx status | grep -q "started"; then
-                green "Nginx配置并启动成功\n"
-            else
-                red "Nginx启动失败\n"
-            fi
+        if pgrep -x nginx > /dev/null 2>&1; then
+            green "Nginx配置并启动成功\n"
         else
-            if systemctl is-active --quiet nginx; then
-                green "Nginx配置并启动成功\n"
-            else
-                red "Nginx启动失败\n"
-            fi
+            red "Nginx启动失败，请检查日志\n"
+            tail -n 10 /var/log/nginx/error.log
         fi
     else
         red "Nginx配置文件验证失败\n"
@@ -643,45 +621,72 @@ fi
 
 # 启动 nginx
 start_nginx() {
-if command -v nginx &>/dev/null; then
-    yellow "\n正在启动 nginx 服务\n"
-    if [ -f /etc/alpine-release ]; then
-        rc-service nginx start
+    if command -v nginx &>/dev/null; then
+        yellow "\n正在启动 nginx 服务\n"
+        
+        # 先杀死可能存在的旧进程
+        killall -9 nginx > /dev/null 2>&1
+        sleep 1
+        
+        if [ -f /etc/alpine-release ]; then
+            rc-service nginx zap > /dev/null 2>&1
+            rc-service nginx start
+        else
+            systemctl daemon-reload
+            systemctl start nginx
+        fi
+        
+        # 验证是否真正启动
+        sleep 1
+        if pgrep -x nginx > /dev/null 2>&1; then
+            green "nginx 服务已成功启动\n"
+        else
+            red "nginx 启动失败\n"
+            # 显示错误日志
+            if [ -f /var/log/nginx/error.log ]; then
+                yellow "错误日志："
+                tail -n 20 /var/log/nginx/error.log
+            fi
+        fi
     else
-        systemctl daemon-reload
-        systemctl start nginx
+        yellow "nginx 尚未安装！\n"
+        sleep 1
+        menu
     fi
-    if [ $? -eq 0 ]; then
-        green "nginx 服务已成功启动\n"
-    else
-        red "nginx 启动失败\n"
-    fi
-else
-    yellow "nginx 尚未安装！\n"
-    sleep 1
-    menu
-fi
 }
 
 # 重启 nginx
 restart_nginx() {
-if command -v nginx &>/dev/null; then
-    yellow "\n正在重启 nginx 服务\n"
-    if [ -f /etc/alpine-release ]; then
-        rc-service nginx restart
+    if command -v nginx &>/dev/null; then
+        yellow "\n正在重启 nginx 服务\n"
+        
+        # 先强制杀死所有进程
+        killall -9 nginx > /dev/null 2>&1
+        sleep 1
+        
+        if [ -f /etc/alpine-release ]; then
+            rc-service nginx zap > /dev/null 2>&1
+            rc-service nginx start
+        else
+            systemctl restart nginx
+        fi
+        
+        # 验证是否真正启动
+        sleep 1
+        if pgrep -x nginx > /dev/null 2>&1; then
+            green "nginx 服务已成功重启\n"
+        else
+            red "nginx 重启失败\n"
+            if [ -f /var/log/nginx/error.log ]; then
+                yellow "错误日志："
+                tail -n 20 /var/log/nginx/error.log
+            fi
+        fi
     else
-        systemctl restart nginx
+        yellow "nginx 尚未安装！\n"
+        sleep 1
+        menu
     fi
-    if [ $? -eq 0 ]; then
-        green "nginx 服务已成功重启\n"
-    else
-        red "nginx 重启失败\n"
-    fi
-else
-    yellow "nginx 尚未安装！\n"
-    sleep 1
-    menu
-fi
 }
 
 # 卸载 xray
