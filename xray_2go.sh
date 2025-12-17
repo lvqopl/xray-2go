@@ -343,6 +343,18 @@ echo ""
 install_nginx () {
     purple "安装nginx中...\n"
     manage_packages install nginx
+    
+    # Alpine 特定配置
+    if [ -f /etc/alpine-release ]; then
+        # 创建必要的目录
+        mkdir -p /var/log/nginx /run/nginx /var/lib/nginx/tmp
+        
+        # 设置权限
+        chown -R nginx:nginx /var/log/nginx /var/lib/nginx
+        
+        # 添加到开机启动
+        rc-update add nginx default
+    fi
 }
 
 # nginx订阅配置
@@ -353,12 +365,19 @@ add_nginx_conf() {
     # 创建日志目录
     mkdir -p /var/log/nginx
     
+    # Alpine 特定的用户设置
+    if [ -f /etc/alpine-release ]; then
+        nginx_user="nginx"
+    else
+        nginx_user="nginx"
+    fi
+    
     # 写入nginx配置
     cat > /etc/nginx/nginx.conf << EOF
-user nginx;
+user $nginx_user;
 worker_processes auto;
 error_log /var/log/nginx/error.log warn;
-pid /var/run/nginx.pid;
+pid /run/nginx.pid;
 
 events {
     worker_connections 1024;
@@ -394,6 +413,10 @@ http {
 }
 EOF
 
+    # 设置日志文件权限
+    chown -R $nginx_user:$nginx_user /var/log/nginx 2>/dev/null
+    chmod 755 /var/log/nginx 2>/dev/null
+    
     # 测试nginx配置
     nginx -t > /dev/null 2>&1
     
