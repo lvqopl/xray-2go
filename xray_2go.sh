@@ -809,6 +809,7 @@ if [ ${check_xray} -eq 0 ]; then
             start_nginx
             green "订阅端口：$sub_port"
             green "\n新的节点订阅链接：http://$server_ip:$sub_port/$password\n"
+            green "\n新的节点订阅链接：https://hax-us2.yyy.xx.kg/sub/xray?config=http://$server_ip:$sub_port/$password\n"
             ;;
         3)
             reading "请输入新的订阅端口(1-65535):" sub_port
@@ -1008,6 +1009,7 @@ if [ ${check_xray} -eq 0 ]; then
     sub_port=$(grep -oP 'listen \K[0-9]+' /etc/nginx/nginx.conf | head -1)
     lujing=$(grep -oP 'location /\K[a-zA-Z0-9]+' /etc/nginx/nginx.conf | head -1)
     green "\n\n节点订阅链接：http://$server_ip:$sub_port/$lujing\n"
+    green "\n\n节点订阅链接：https://hax-us2.yyy.xx.kg/sub/xray?config=http://$server_ip:$sub_port/$lujing\n"
 else
     yellow "Xray-2go 尚未安装或未运行,请先安装或启动Xray-2go"
     sleep 1
