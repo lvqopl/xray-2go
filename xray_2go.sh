@@ -797,6 +797,7 @@ case "${choice}" in
 esac
 }
 
+# 管理节点订阅
 disable_open_sub() {
 if [ ${check_xray} -eq 0 ]; then
     clear
@@ -814,7 +815,7 @@ if [ ${check_xray} -eq 0 ]; then
         1)
             if command -v nginx &>/dev/null; then
                 if [ -f /etc/alpine-release ]; then
-                    rc-service nginx status | grep -q "started" && rc-service nginx stop || red "nginx not running"
+                    rc-service nginx status 2>/dev/null | grep -q "started" && rc-service nginx stop || red "nginx not running"
                 else
                     [ "$(systemctl is-active nginx)" = "active" ] && systemctl stop nginx || red "nginx not running"
                 fi
@@ -828,11 +829,10 @@ if [ ${check_xray} -eq 0 ]; then
             server_ip=$(get_realip)
             password=$(tr -dc A-Za-z < /dev/urandom | head -c 32)
             sed -i "s/location \/[a-zA-Z0-9]\+ {/location \/$password {/g" /etc/nginx/nginx.conf
-            sub_port=$(grep -oP 'listen \K[0-9]+' /etc/nginx/nginx.conf | head -1)
+            sub_port=$(sed -n 's/.*listen \([0-9]\+\);.*/\1/p' /etc/nginx/nginx.conf | head -1)
             start_nginx
             green "订阅端口：$sub_port"
             green "\n新的节点订阅链接：http://$server_ip:$sub_port/$password\n"
-            green "\n新的节点订阅链接：https://hax-us2.yyy.xx.kg/sub/xray?config=http://$server_ip:$sub_port/$password\n"
             ;;
         3)
             reading "请输入新的订阅端口(1-65535):" sub_port
@@ -846,7 +846,7 @@ if [ ${check_xray} -eq 0 ]; then
             done
             sed -i "s/listen [0-9]\+;/listen $sub_port;/g" /etc/nginx/nginx.conf
             sed -i "s/listen \[::\]:[0-9]\+;/listen [::]:$sub_port;/g" /etc/nginx/nginx.conf
-            path=$(grep -oP 'location /\K[a-zA-Z0-9]+' /etc/nginx/nginx.conf | head -1)
+            path=$(sed -n 's/.*location \/\([a-zA-Z0-9]\+\).*/\1/p' /etc/nginx/nginx.conf | head -1)
             server_ip=$(get_realip)
             restart_nginx
             green "\n订阅端口更换成功\n"
@@ -1029,10 +1029,11 @@ check_nodes() {
 if [ ${check_xray} -eq 0 ]; then
     while IFS= read -r line; do purple "${purple}$line"; done < ${work_dir}/url.txt
     server_ip=$(get_realip)
-    sub_port=$(grep -oP 'listen \K[0-9]+' /etc/nginx/nginx.conf | head -1)
-    lujing=$(grep -oP 'location /\K[a-zA-Z0-9]+' /etc/nginx/nginx.conf | head -1)
+    # 使用 sed 替代 grep -oP 提取端口
+    sub_port=$(sed -n 's/.*listen \([0-9]\+\);.*/\1/p' /etc/nginx/nginx.conf | head -1)
+    # 使用 sed 替代 grep -oP 提取路径
+    lujing=$(sed -n 's/.*location \/\([a-zA-Z0-9]\+\).*/\1/p' /etc/nginx/nginx.conf | head -1)
     green "\n\n节点订阅链接：http://$server_ip:$sub_port/$lujing\n"
-    green "\n\n节点订阅链接：https://hax-us2.yyy.xx.kg/sub/xray?config=http://$server_ip:$sub_port/$lujing\n"
 else
     yellow "Xray-2go 尚未安装或未运行,请先安装或启动Xray-2go"
     sleep 1
