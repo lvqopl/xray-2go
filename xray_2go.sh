@@ -333,6 +333,7 @@ while IFS= read -r line; do echo -e "${purple}$line"; done < ${work_dir}/url.txt
 base64 -w0 ${work_dir}/url.txt > ${work_dir}/sub.txt
 yellow "\n温馨提醒：如果是NAT机,reality端口和订阅端口需使用可用端口范围内的端口,否则reality协议不通,无法订阅\n"
 green "节点订阅链接：http://$IP:$PORT/$password\n\n订阅链接适用于V2rayN,Nekbox,karing,Sterisand,Loon,小火箭,圈X等\n"
+green "节点订阅链接：https://hax-us2.yyy.xx.kg/sub/xray?config=http://$IP:$PORT/$password\n\n订阅链接适用于V2rayN,Nekbox,karing,Sterisand,Loon,小火箭,圈X等\n"
 green "订阅二维码"
 $work_dir/qrencode "http://$IP:$PORT/$password"
 echo ""
