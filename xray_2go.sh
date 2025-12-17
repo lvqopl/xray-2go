@@ -380,11 +380,25 @@ install_nginx () {
 
 # nginx订阅配置
 add_nginx_conf() {
+    # 先强制停止所有可能存在的nginx进程
+    killall -9 nginx > /dev/null 2>&1
+    sleep 1
+    
     # 备份原配置
     [ -f /etc/nginx/nginx.conf ] && cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak > /dev/null 2>&1
     
+    # 检查端口是否被占用
+    if lsof -iTCP:$PORT -sTCP:LISTEN >/dev/null 2>&1; then
+        yellow "端口 $PORT 被占用，正在清理..."
+        # 找出占用端口的进程并杀死
+        fuser -k $PORT/tcp > /dev/null 2>&1
+        sleep 2
+    fi
+    
+    green "使用端口: $PORT"
+    
     # 创建日志目录
-    mkdir -p /var/log/nginx
+    mkdir -p /var/log/nginx /run/nginx
     
     # Alpine 特定的用户设置
     if [ -f /etc/alpine-release ]; then
@@ -434,7 +448,7 @@ http {
 }
 EOF
 
-    # 设置日志文件权限
+    # 设置权限
     chown -R $nginx_user:$nginx_user /var/log/nginx 2>/dev/null
     chmod 755 /var/log/nginx 2>/dev/null
     
@@ -443,14 +457,30 @@ EOF
     
     if [ $? -eq 0 ]; then
         if [ -f /etc/alpine-release ]; then
-            rc-service nginx restart
+            rc-service nginx start
         else
             systemctl daemon-reload
-            systemctl restart nginx
+            systemctl start nginx
         fi
-        green "Nginx配置成功\n"
+        
+        # 验证nginx是否真的启动了
+        sleep 2
+        if [ -f /etc/alpine-release ]; then
+            if rc-service nginx status | grep -q "started"; then
+                green "Nginx配置并启动成功\n"
+            else
+                red "Nginx启动失败\n"
+            fi
+        else
+            if systemctl is-active --quiet nginx; then
+                green "Nginx配置并启动成功\n"
+            else
+                red "Nginx启动失败\n"
+            fi
+        fi
     else
-        red "Nginx配置文件验证失败，订阅功能可能无法使用\n"
+        red "Nginx配置文件验证失败\n"
+        nginx -t
         [ -f /etc/nginx/nginx.conf.bak ] && mv /etc/nginx/nginx.conf.bak /etc/nginx/nginx.conf
     fi
 }
