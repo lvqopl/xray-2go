@@ -281,7 +281,7 @@ EOF
     systemctl is-active --quiet tunnel || systemctl start xray
 }
 
-# 适配alpine 守护进程
+# 适配alpine 守护进程 - 添加自动重启功能
 alpine_openrc_services() {
     cat > /etc/init.d/xray << 'EOF'
 #!/sbin/openrc-run
@@ -290,7 +290,18 @@ command="/etc/xray/xray"
 command_args="run -c /etc/xray/config.json"
 command_background=true
 pidfile="/var/run/xray.pid"
+
+# 添加自动重启配置
+respawn_delay=5
+respawn_max=0
+respawn_period=60
+
+depend() {
+    need net
+    after firewall
+}
 EOF
+
     cat > /etc/init.d/tunnel << 'EOF'
 #!/sbin/openrc-run
 description="Cloudflare Tunnel"
@@ -298,13 +309,23 @@ command="/bin/sh"
 command_args="-c '/etc/xray/argo tunnel --url http://localhost:8080 --no-autoupdate --edge-ip-version auto --protocol http2 > /etc/xray/argo.log 2>&1'"
 command_background=true
 pidfile="/var/run/tunnel.pid"
+
+# 添加自动重启配置
+respawn_delay=5
+respawn_max=0
+respawn_period=60
+
+depend() {
+    need net
+    after firewall
+}
 EOF
+    
     chmod +x /etc/init.d/xray
     chmod +x /etc/init.d/tunnel
     rc-update add xray default
     rc-update add tunnel default
 }
-
 get_info() {  
   clear
   IP=$(get_realip)
